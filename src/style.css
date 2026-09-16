@@ -274,6 +274,12 @@ nav i {
   color: #bac2b8;
   font-weight: 400;
 }
+.topbar > span:first-child {
+  font-size: 16px;
+  font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .environment {
   font-size: 11px;
   color: #778874;
@@ -794,6 +800,87 @@ details summary {
 }
 .history > .history-note {
   margin: 16px 0 8px;
+}
+.question-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 14px;
+  font-size: 12px;
+}
+.question-scope select {
+  appearance: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--green);
+  background: #fafcf8
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23557346' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 12px center;
+  border: 1px solid #d5dfcf;
+  border-radius: 9px;
+  padding: 9px 38px 9px 13px;
+  min-height: 40px;
+  max-width: 100%;
+  width: 240px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.question-scope select:hover:not(:disabled) {
+  border-color: #8da986;
+}
+.question-scope select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.question-scope select:focus-visible {
+  outline: 2px solid #81b59c;
+  outline-offset: 2px;
+}
+/* Style the native popup where supported; older browsers retain native options. */
+@supports (appearance: base-select) {
+  .question-scope select,
+  .question-scope select::picker(select) {
+    appearance: base-select;
+  }
+  .question-scope select {
+    background-image: none;
+    padding-right: 13px;
+  }
+  .question-scope select::picker-icon {
+    color: #557346;
+  }
+  .question-scope select::picker(select) {
+    margin-top: 6px;
+    padding: 5px;
+    border: 1px solid #d5dfcf;
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 8px 24px #273d331a;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .question-scope option {
+    padding: 9px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .question-scope option:hover,
+  .question-scope option:focus {
+    background: #f3f6ef;
+  }
+  .question-scope option:checked {
+    background: #eaf1e4;
+    color: var(--green);
+    font-weight: 600;
+  }
+}
+.answer-scope {
+  font-size: 12px;
 }
 .progress {
   margin-bottom: 20px;

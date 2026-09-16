@@ -128,7 +128,6 @@ async function create() {
       <a class="brand" href="/" aria-label="TraceBase 首页"
         ><img src="/logo.svg" alt="" />TraceBase</a
       >
-      <p class="nav-label">工作区</p>
       <nav>
         <button
           v-for="(label, key) in titles"
@@ -230,6 +229,7 @@ async function create() {
           </template>
           <Chat
             v-else-if="tab === 'chat'"
+            :spaces="spaces"
             @preview="source = $event"
             @changed="refresh"
             @feedback-saved="updateFeedback"

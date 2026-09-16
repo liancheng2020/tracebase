@@ -17,13 +17,17 @@ export async function streamAnswer(
   question: string,
   signal: AbortSignal,
   onEvent: (event: string, data: any) => void,
+  space?: string,
 ) {
-  const response = await fetch("/api/ask", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
-    signal,
-  });
+  const response = await fetch(
+    space ? "/api/spaces/" + encodeURIComponent(space) + "/ask" : "/api/ask",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+      signal,
+    },
+  );
   if (!response.ok) throw Error((await response.json()).error || "问答失败");
   if (!response.body) throw Error("浏览器不支持响应流");
   const reader = response.body.getReader(),

@@ -290,6 +290,32 @@ try {
   }
   await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
   await page.locator(".library-card").filter({ hasText: "星桥" }).click();
+  await page.locator("nav").getByRole("button", { name: "问答工作台" }).click();
+  const scopeSelect = page.getByLabel("知识库（可选）");
+  assert.equal(await scopeSelect.inputValue(), "");
+  await scopeSelect.selectOption({ label: "第二知识库" });
+  await page.getByLabel("你的问题").fill("部署端口 PORT 配置");
+  await page.getByRole("button", { name: "提问 ↗", exact: true }).click();
+  await page.locator(".answer-card").waitFor();
+  assert.match(
+    await page.locator(".answer-card").innerText(),
+    /没有找到足够相关/,
+  );
+  assert.match(await page.locator(".answer-scope").innerText(), /第二知识库/);
+  assert.doesNotMatch(await page.locator(".answer-card").innerText(), /5600/);
+  await scopeSelect.selectOption({ label: "星桥 · 项目知识" });
+  await page.getByRole("button", { name: "提问 ↗", exact: true }).click();
+  await page.locator(".answer-card").waitFor();
+  assert.match(await page.locator(".answer-card").innerText(), /5600/);
+  assert.match(await page.locator(".answer-scope").innerText(), /星桥/);
+  await scopeSelect.selectOption("");
+  assert.match(await page.locator(".answer-scope").innerText(), /星桥/);
+  await page.getByRole("button", { name: "提问 ↗", exact: true }).click();
+  await page.locator(".answer-card").waitFor();
+  assert.match(await page.locator(".answer-scope").innerText(), /全部知识库/);
+  assert.match(await page.locator(".answer-card").innerText(), /5600/);
+  await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
+  await page.locator(".library-card").filter({ hasText: "星桥" }).click();
   await page.getByRole("button", { name: "删除", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await page.getByRole("button", { name: "从示例开始", exact: true }).waitFor();
@@ -305,9 +331,7 @@ try {
     .click();
   assert.equal(await page.locator(".library-card").count(), 2);
   await deleteLibrary.click();
-  await page
-    .getByRole("button", { name: "确认删除", exact: true })
-    .click();
+  await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await page
     .locator(".library-card")
     .filter({ hasText: "星桥" })
@@ -316,9 +340,7 @@ try {
   await page
     .getByRole("button", { name: "删除知识库：第二知识库", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "确认删除", exact: true })
-    .click();
+  await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await page.getByRole("button", { name: "创建第一个知识库" }).waitFor();
   assert.deepEqual(errors, []);
   console.log(

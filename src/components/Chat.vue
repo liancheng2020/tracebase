@@ -1,7 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
-import type { Answer, Evidence, Section } from "../../shared/types";
+import type { Answer, Evidence, Section, Space } from "../../shared/types";
 import { api, streamAnswer, date } from "../api";
+const props = defineProps<{ spaces: Space[] }>();
+const selectedSpace = ref("");
+const scopeName = (id?: string | null) =>
+  id ? props.spaces.find((s) => s.id === id)?.name || "原知识库" : "全部知识库";
+watch(
+  () => props.spaces,
+  (spaces) => {
+    if (
+      selectedSpace.value &&
+      !spaces.some((s) => s.id === selectedSpace.value)
+    )
+      selectedSpace.value = "";
+  },
+);
 const emit = defineEmits<{
   preview: [evidence: Evidence];
   changed: [];
@@ -59,16 +73,21 @@ async function ask() {
   partial.value = [];
   controller = new AbortController();
   try {
-    await streamAnswer(question.value, controller.signal, (event, data) => {
-      if (event === "progress") progress.value = data;
-      if (event === "section") partial.value.push(data);
-      if (event === "error") throw Error(data);
-      if (event === "answer") {
-        active.value = data;
-        answers.value = [data, ...answers.value].slice(0, 30);
-        emit("changed");
-      }
-    });
+    await streamAnswer(
+      question.value,
+      controller.signal,
+      (event, data) => {
+        if (event === "progress") progress.value = data;
+        if (event === "section") partial.value.push(data);
+        if (event === "error") throw Error(data);
+        if (event === "answer") {
+          active.value = data;
+          answers.value = [data, ...answers.value].slice(0, 30);
+          emit("changed");
+        }
+      },
+      selectedSpace.value || undefined,
+    );
     if (!active.value) throw Error("连接中断，没有收到完整回答");
   } catch (e) {
     if ((e as Error).name !== "AbortError") error.value = (e as Error).message;
@@ -114,11 +133,21 @@ async function submitFeedback() {
       <p class="eyebrow">ASK WITH EVIDENCE</p>
       <h2>每个答案，都有来处。</h2>
       <p class="muted">
-        统一检索全部知识库，引用标注来源。资料不足时，明确说不知道。
+        默认检索全部知识库，也可选择单个知识库缩小范围。资料不足时，明确说不知道。
       </p>
     </div>
   </div>
   <form class="question-box" @submit.prevent="ask">
+    <div class="question-scope">
+      <label for="question-space">知识库（可选）</label>
+      <select id="question-space" v-model="selectedSpace" :disabled="busy">
+        <option value="">全部知识库</option>
+        <option v-for="item in spaces" :key="item.id" :value="item.id">
+          {{ item.name }}
+        </option>
+      </select>
+      <span class="muted">仅影响下一次提问，不筛选历史记录</span>
+    </div>
     <label class="visually-hidden" for="question">你的问题</label
     ><textarea
       id="question"
@@ -148,6 +177,9 @@ async function submitFeedback() {
           ><small>{{ (active.elapsedMs / 1000).toFixed(1) }}s</small>
         </div>
         <h3>{{ active.question }}</h3>
+        <p class="muted answer-scope">
+          本次检索范围：{{ scopeName(active.space_id) }}
+        </p>
         <p class="notice">{{ active.notice }}</p>
         <section
           v-for="(section, index) in active.sections"
