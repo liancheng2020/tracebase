@@ -4,13 +4,17 @@ import type { Evidence, Answer } from "../shared/types.ts";
 import { tokens } from "./documents.ts";
 import { embed, generate } from "./models.ts";
 const columns =
-  "c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content,d.extraction_warning";
-export async function retrieve(db: Database, space: string, question: string) {
+  "d.space_id,(SELECT name FROM spaces WHERE id=d.space_id) AS space_name,c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content,d.extraction_warning";
+export async function retrieve(
+  db: Database,
+  space: string | null,
+  question: string,
+) {
   const terms = tokens(question).slice(0, 150);
   const lexical = await db.query<Evidence>(
     "SELECT " +
       columns +
-      ", (SELECT count(*) FROM unnest(c.tokens) t WHERE t=ANY($2::text[]))::float AS score FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.space_id=$1 AND c.revision=d.active_revision AND c.tokens && $2::text[] ORDER BY score DESC,c.id LIMIT 18",
+      ", (SELECT count(*) FROM unnest(c.tokens) t WHERE t=ANY($2::text[]))::float AS score FROM chunks c JOIN documents d ON d.id=c.document_id WHERE ($1::uuid IS NULL OR d.space_id=$1) AND c.revision=d.active_revision AND c.tokens && $2::text[] ORDER BY score DESC,c.id LIMIT 18",
     [space, terms],
   );
   let semantic: Evidence[] = [],
@@ -22,7 +26,7 @@ export async function retrieve(db: Database, space: string, question: string) {
         await db.query<Evidence>(
           "SELECT " +
             columns +
-            ", 1-(c.embedding <=> $2::vector) AS score FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.space_id=$1 AND c.revision=d.active_revision AND c.model=$3 AND vector_dims(c.embedding)=$4 AND 1-(c.embedding <=> $2::vector)>0.45 ORDER BY c.embedding <=> $2::vector LIMIT 18",
+            ", 1-(c.embedding <=> $2::vector) AS score FROM chunks c JOIN documents d ON d.id=c.document_id WHERE ($1::uuid IS NULL OR d.space_id=$1) AND c.revision=d.active_revision AND c.model=$3 AND vector_dims(c.embedding)=$4 AND 1-(c.embedding <=> $2::vector)>0.45 ORDER BY c.embedding <=> $2::vector LIMIT 18",
           [
             space,
             JSON.stringify(result.vectors[0]),
@@ -52,15 +56,18 @@ export async function retrieve(db: Database, space: string, question: string) {
 }
 export async function answerQuestion(
   db: Database,
-  space: string,
+  space: string | null,
   question: string,
   onProgress: (stage: string) => void = () => {},
 ) {
   const start = Date.now();
-  onProgress("正在检索当前空间的有效文档…");
+  onProgress(
+    space ? "正在检索当前知识库的有效文档…" : "正在检索全部知识库的有效文档…",
+  );
   const found = await retrieve(db, space, question);
   const answer: Answer = {
     id: randomUUID(),
+    space_id: space,
     question,
     sections: [],
     evidence: found.evidence,
@@ -97,7 +104,7 @@ export async function answerQuestion(
   await db.transaction(async (tx) => {
     if (answer.evidence.length) {
       const valid = await tx.query(
-        "SELECT c.id FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.space_id=$1 AND c.revision=d.active_revision AND c.id=ANY($2::uuid[])",
+        "SELECT c.id FROM chunks c JOIN documents d ON d.id=c.document_id WHERE ($1::uuid IS NULL OR d.space_id=$1) AND c.revision=d.active_revision AND c.id=ANY($2::uuid[])",
         [space, answer.evidence.map((e) => e.id)],
       );
       if (valid.rows.length !== answer.evidence.length) {

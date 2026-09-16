@@ -19,6 +19,8 @@ export interface Document {
   mode: string | null;
 }
 export interface Evidence {
+  space_id?: string;
+  space_name?: string;
   extraction_warning?: string | null;
   id: string;
   document_id: string;
@@ -34,6 +36,7 @@ export interface Section {
   citations: { chunkId: string; quote: string }[];
 }
 export interface Answer {
+  space_id?: string | null;
   errorCode?: string;
   id: string;
   question: string;

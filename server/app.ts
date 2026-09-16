@@ -8,6 +8,8 @@ import { createIndexer, saveDocument } from "./library.ts";
 import { answerQuestion } from "./search.ts";
 import { embeddingConfig } from "./models.ts";
 const uuid = (value: unknown) => z.string().uuid().parse(value);
+const scope = (req: express.Request) =>
+  req.params.space ? uuid(req.params.space) : null;
 const filename = (value: string) => {
   let name = value;
   try {
@@ -62,16 +64,35 @@ export function createApi(db: Database) {
     await db.query("INSERT INTO spaces(id,name) VALUES($1,$2)", [id, name]);
     res.status(201).json({ id, name });
   });
-  app.get("/api/spaces/:space/documents", async (req, res) => {
-    res.json(
-      (
-        await db.query(
-          "SELECT d.*,(SELECT count(*)::int FROM chunks c WHERE c.document_id=d.id AND c.revision=d.active_revision) AS chunk_count FROM documents d WHERE d.space_id=$1 ORDER BY d.updated_at DESC",
-          [uuid(req.params.space)],
-        )
-      ).rows,
-    );
+  app.delete("/api/spaces/:space", async (req, res) => {
+    const id = uuid(req.params.space);
+    const deleted = await db.transaction(async (tx) => {
+      await tx.query(
+        "DELETE FROM answers WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'evidence') e JOIN documents d ON d.id::text=e->>'document_id' WHERE d.space_id=$1)",
+        [id],
+      );
+      return (
+        (await tx.query("DELETE FROM spaces WHERE id=$1 RETURNING id", [id]))
+          .rows.length > 0
+      );
+    });
+    res
+      .status(deleted ? 200 : 404)
+      .json(deleted ? { ok: true } : { error: "知识库不存在" });
   });
+  app.get(
+    ["/api/documents", "/api/spaces/:space/documents"],
+    async (req, res) => {
+      res.json(
+        (
+          await db.query(
+            "SELECT d.*,(SELECT count(*)::int FROM chunks c WHERE c.document_id=d.id AND c.revision=d.active_revision) AS chunk_count FROM documents d WHERE ($1::uuid IS NULL OR d.space_id=$1) ORDER BY d.updated_at DESC",
+            [scope(req)],
+          )
+        ).rows,
+      );
+    },
+  );
   const uploadDocument: express.RequestHandler = async (req, res) => {
     const space = uuid(req.params.space),
       id = req.params.id ? uuid(req.params.id) : undefined;
@@ -120,7 +141,7 @@ export function createApi(db: Database) {
     }
     const chunks = (
       await db.query(
-        "SELECT c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content,d.extraction_warning FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.id=$1 AND d.space_id=$2 AND c.revision=d.active_revision ORDER BY c.position",
+        "SELECT d.space_id,c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content,d.extraction_warning FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.id=$1 AND d.space_id=$2 AND c.revision=d.active_revision ORDER BY c.position",
         params,
       )
     ).rows;
@@ -138,7 +159,7 @@ export function createApi(db: Database) {
     await db.transaction(async (tx) => {
       // Delete answer snapshots containing the removed source as well as its chunks/revisions.
       await tx.query(
-        "DELETE FROM answers WHERE space_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'evidence') e WHERE e->>'document_id'=$2)",
+        "DELETE FROM answers WHERE EXISTS (SELECT 1 FROM documents WHERE id=$2::text::uuid AND space_id=$1) AND EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'evidence') e WHERE e->>'document_id'=$2::text)",
         [space, id],
       );
       await tx.query("DELETE FROM documents WHERE id=$1 AND space_id=$2", [
@@ -148,19 +169,25 @@ export function createApi(db: Database) {
     });
     res.json({ ok: true });
   });
-  app.get("/api/spaces/:space/answers", async (req, res) => {
+  app.get(["/api/answers", "/api/spaces/:space/answers"], async (req, res) => {
     const { rows } = await db.query<{
       payload: Answer;
+      space_id: string | null;
       feedback: string | null;
       feedback_note: string;
       created_at: string;
     }>(
-      "SELECT payload,feedback,feedback_note,created_at FROM answers WHERE space_id=$1 ORDER BY created_at DESC LIMIT 30",
-      [uuid(req.params.space)],
+      "SELECT payload,space_id,feedback,feedback_note,created_at FROM answers WHERE ($1::uuid IS NULL OR space_id=$1) ORDER BY created_at DESC LIMIT 30",
+      [scope(req)],
     );
     res.json(
       rows.map((r) => ({
         ...r.payload,
+        space_id: r.space_id,
+        evidence: r.payload.evidence.map((e) => ({
+          ...e,
+          space_id: e.space_id ?? r.space_id ?? undefined,
+        })),
         feedback: r.feedback,
         feedback_note: r.feedback_note,
         created_at: r.created_at,
@@ -168,10 +195,11 @@ export function createApi(db: Database) {
     );
   });
   let active = 0;
-  app.post("/api/spaces/:space/ask", async (req, res) => {
-    const space = uuid(req.params.space),
+  app.post(["/api/ask", "/api/spaces/:space/ask"], async (req, res) => {
+    const space = scope(req),
       question = z.string().trim().min(2).max(1500).parse(req.body.question);
     if (
+      space &&
       !(await db.query("SELECT id FROM spaces WHERE id=$1", [space])).rows
         .length
     ) {
@@ -210,17 +238,20 @@ export function createApi(db: Database) {
       res.end();
     }
   });
-  app.post("/api/spaces/:space/answers/:id/feedback", async (req, res) => {
-    const kind = z.enum(["helpful", "incorrect"]).parse(req.body.kind);
-    const note = z.string().max(500).optional().parse(req.body.note) || "";
-    const { rows } = await db.query(
-      "UPDATE answers SET feedback=$3,feedback_note=$4 WHERE id=$1 AND space_id=$2 RETURNING id",
-      [uuid(req.params.id), uuid(req.params.space), kind, note],
-    );
-    res
-      .status(rows.length ? 200 : 404)
-      .json(rows[0] || { error: "回答不存在" });
-  });
+  app.post(
+    ["/api/answers/:id/feedback", "/api/spaces/:space/answers/:id/feedback"],
+    async (req, res) => {
+      const kind = z.enum(["helpful", "incorrect"]).parse(req.body.kind);
+      const note = z.string().max(500).optional().parse(req.body.note) || "";
+      const { rows } = await db.query(
+        "UPDATE answers SET feedback=$3,feedback_note=$4 WHERE id=$1 AND ($2::uuid IS NULL OR space_id=$2) RETURNING id",
+        [uuid(req.params.id), scope(req), kind, note],
+      );
+      res
+        .status(rows.length ? 200 : 404)
+        .json(rows[0] || { error: "回答不存在" });
+    },
+  );
   app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
   app.use(((error, _req, res, _next) => {
     if (error instanceof z.ZodError)

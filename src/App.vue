@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import type { Space, Document, Evidence, Answer } from "../shared/types";
 import { api } from "./api";
+import Libraries from "./components/Libraries.vue";
 import Documents from "./components/Documents.vue";
 import Chat from "./components/Chat.vue";
 import EvidencePanel from "./components/EvidencePanel.vue";
@@ -23,6 +24,14 @@ const config = ref({
 const activeSpace = computed(() =>
   spaces.value.find((s) => s.id === space.value),
 );
+const libraryDocuments = computed(() =>
+  documents.value.filter((d) => d.space_id === space.value),
+);
+const visibleDocuments = computed(() =>
+  tab.value === "library" && space.value
+    ? libraryDocuments.value
+    : documents.value,
+);
 const issues = computed(() =>
   documents.value.filter((d) => d.status === "failed" || d.error),
 );
@@ -38,40 +47,39 @@ const titles: Record<string, string> = {
   health: "知识健康",
 };
 let timer: ReturnType<typeof setInterval> | undefined,
-  loading = false;
+  loading = false,
+  refreshQueued = false;
 async function refresh() {
-  if (loading) return;
+  if (loading) {
+    refreshQueued = true;
+    return;
+  }
   loading = true;
-  const requested = space.value;
   try {
     spaces.value = await api<Space[]>("/spaces");
-    if (!space.value && spaces.value[0]) space.value = spaces.value[0].id;
-    if (requested) {
-      const [docs, answers] = await Promise.all([
-        api<Document[]>("/spaces/" + requested + "/documents"),
-        api<Answer[]>("/spaces/" + requested + "/answers"),
-      ]);
-      if (requested === space.value) {
-        documents.value = docs;
-        feedback.value = answers;
-      }
-    }
+
+    const [docs, answers] = await Promise.all([
+      api<Document[]>("/documents"),
+      api<Answer[]>("/answers"),
+    ]);
+    documents.value = docs;
+    feedback.value = answers;
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
     loading = false;
+    if (refreshQueued) {
+      refreshQueued = false;
+      void refresh();
+    }
   }
 }
 watch(space, () => {
   source.value = null;
-  documents.value = [];
-  feedback.value = [];
-  void refresh();
 });
 onMounted(async () => {
   try {
     config.value = await api("/config");
-    await refresh();
     await refresh();
     timer = setInterval(() => {
       if (pending.value && !document.hidden) void refresh();
@@ -90,6 +98,11 @@ function updateFeedback(answer: Answer) {
     feedback.value = [answer, ...feedback.value].slice(0, 30);
   }
 }
+function openLibrary(id = "") {
+  tab.value = "library";
+  space.value = id;
+  source.value = null;
+}
 async function create() {
   if (createBusy.value || !newName.value.trim()) return;
   createBusy.value = true;
@@ -98,7 +111,7 @@ async function create() {
       method: "POST",
       body: JSON.stringify({ name: newName.value }),
     });
-    space.value = result.id;
+    openLibrary(result.id);
     newName.value = "";
     creating.value = false;
     await refresh();
@@ -123,6 +136,7 @@ async function create() {
           :class="{ active: tab === key }"
           @click="
             tab = String(key);
+            space = '';
             source = null;
           "
         >
@@ -131,25 +145,6 @@ async function create() {
           }}<i v-if="key === 'health' && issues.length">{{ issues.length }}</i>
         </button>
       </nav>
-      <div class="space-heading">
-        <p class="nav-label">我的知识空间</p>
-        <button aria-label="新建知识空间" @click="creating = true">＋</button>
-      </div>
-      <button
-        v-for="s in spaces"
-        :key="s.id"
-        :class="['space-link', { selected: s.id === space }]"
-        @click="
-          space = s.id;
-          source = null;
-        "
-      >
-        <span class="space-dot"></span>{{ s.name
-        }}<small>{{ s.documents }}</small>
-      </button>
-      <p v-if="!spaces.length" class="sidebar-muted">
-        还没有空间，创建你的第一份项目记忆。
-      </p>
       <div class="sidebar-bottom">
         <span class="local-dot"></span>本机存储 · 不自动上传
         <p>相关文本仅在调用配置的模型时发送。</p>
@@ -159,7 +154,9 @@ async function create() {
       <header class="topbar">
         <span
           >{{ titles[tab] }} <b>/</b>
-          {{ activeSpace?.name || "开始使用" }}</span
+          {{
+            tab === "library" ? activeSpace?.name || "全部知识库" : "全部知识库"
+          }}</span
         ><span class="environment"
           >{{ config.chat ? "DeepSeek 已配置" : "原文摘录模式" }} ·
           {{ config.embedding ? "混合检索已配置" : "关键词检索" }}</span
@@ -170,14 +167,17 @@ async function create() {
           {{ error }}
           <button class="text-button" @click="error = ''">关闭</button>
         </div>
-        <section v-if="!space" class="welcome card">
+        <section
+          v-if="tab === 'library' && !spaces.length"
+          class="welcome card"
+        >
           <p class="eyebrow">LESS SEARCHING. MORE KNOWING.</p>
           <h1>让项目经验，<br /><em>有据可循。</em></h1>
           <p>
             文档、设计决策、排障经验，放进同一个知识空间。<br />提问时看见答案，也看见它的来处。
           </p>
           <button class="primary" @click="creating = true">
-            创建第一个知识空间 ↗
+            创建第一个知识库 ↗
           </button>
           <div class="welcome-features">
             <span>01 文档可管理</span><span>02 答案有出处</span
@@ -188,12 +188,12 @@ async function create() {
           ><div class="metrics">
             <div>
               <span>已收录文档</span
-              ><strong>{{ documents.length }}<small>份</small></strong>
+              ><strong>{{ visibleDocuments.length }}<small>份</small></strong>
             </div>
             <div>
               <span>有效证据片段</span
               ><strong
-                >{{ documents.reduce((sum, d) => sum + d.chunk_count, 0)
+                >{{ visibleDocuments.reduce((sum, d) => sum + d.chunk_count, 0)
                 }}<small>段</small></strong
               >
             </div>
@@ -206,18 +206,30 @@ async function create() {
               ><strong>{{ issues.length }}<small>项</small></strong>
             </div>
           </div>
-          <Documents
-            v-if="tab === 'library'"
-            :key="space"
-            :space="space"
+          <Libraries
+            v-if="tab === 'library' && !space"
+            :spaces="spaces"
             :documents="documents"
+            @open="openLibrary"
+            @create="creating = true"
             @changed="refresh"
-            @preview="source = $event"
           />
+          <template v-else-if="tab === 'library'">
+            <div class="library-breadcrumb" aria-label="资料导航">
+              <button class="text-button" @click="openLibrary()">
+                知识空间</button
+              ><span>/</span><strong>{{ activeSpace?.name }}</strong>
+            </div>
+            <Documents
+              :key="space"
+              :space="space"
+              :documents="libraryDocuments"
+              @changed="refresh"
+              @preview="source = $event"
+            />
+          </template>
           <Chat
             v-else-if="tab === 'chat'"
-            :key="space"
-            :space="space"
             @preview="source = $event"
             @changed="refresh"
             @feedback-saved="updateFeedback"
@@ -240,14 +252,20 @@ async function create() {
                 <p v-if="!issues.length" class="healthy">✓ 当前没有索引故障</p>
                 <div v-for="d in issues" :key="d.id" class="health-item">
                   <strong>{{ d.title }}</strong>
+                  <small>{{
+                    spaces.find((s) => s.id === d.space_id)?.name
+                  }}</small>
                   <p>{{ d.error }}</p>
+                  <button class="text-button" @click="openLibrary(d.space_id)">
+                    前往处理 →
+                  </button>
                   <small>{{
                     d.active_revision
                       ? "仍可检索旧版 v" + d.active_revision
                       : "尚未进入检索"
                   }}</small>
                 </div>
-                <button class="text-button" @click="tab = 'library'">
+                <button class="text-button" @click="openLibrary()">
                   前往资料管理 →
                 </button>
               </section>
@@ -281,12 +299,7 @@ async function create() {
                 </button>
               </section>
             </div>
-            <div class="notice">
-              第一版不自动判断文档矛盾或过期，不会擅自修改你的知识。当前存储：{{
-                config.storage
-              }}。
-            </div></template
-          >
+          </template>
         </template>
         <footer>
           TraceBase <span>项目知识，有迹可循。</span
@@ -296,7 +309,7 @@ async function create() {
     </div>
     <EvidencePanel
       v-if="source"
-      :space="space"
+      :space="source.space_id || space"
       :source="source"
       @close="source = null"
     />
@@ -309,9 +322,11 @@ async function create() {
         @submit.prevent="create"
       >
         <p class="eyebrow">NEW KNOWLEDGE SPACE</p>
-        <h3 id="space-title">创建知识空间</h3>
-        <p class="muted">建议按项目划分。每次问答只检索所选空间。</p>
-        <label for="space-name">空间名称</label
+        <h3 id="space-title">创建知识库</h3>
+        <p class="muted">
+          按项目或主题整理资料，问答工作台默认检索全部知识库。
+        </p>
+        <label for="space-name">知识库名称</label
         ><input
           id="space-name"
           v-model="newName"
@@ -323,7 +338,7 @@ async function create() {
         <div class="actions">
           <button type="button" @click="creating = false">取消</button
           ><button class="primary" :disabled="createBusy || !newName.trim()">
-            创建空间
+            创建知识库
           </button>
         </div>
       </form>

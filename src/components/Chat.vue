@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import type { Answer, Evidence, Section } from "../../shared/types";
 import { api, streamAnswer, date } from "../api";
-const props = defineProps<{ space: string }>();
 const emit = defineEmits<{
   preview: [evidence: Evidence];
   changed: [];
@@ -46,7 +45,7 @@ const modeNames = {
 };
 onMounted(async () => {
   try {
-    answers.value = await api<Answer[]>("/spaces/" + props.space + "/answers");
+    answers.value = await api<Answer[]>("/answers");
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -60,21 +59,16 @@ async function ask() {
   partial.value = [];
   controller = new AbortController();
   try {
-    await streamAnswer(
-      props.space,
-      question.value,
-      controller.signal,
-      (event, data) => {
-        if (event === "progress") progress.value = data;
-        if (event === "section") partial.value.push(data);
-        if (event === "error") throw Error(data);
-        if (event === "answer") {
-          active.value = data;
-          answers.value = [data, ...answers.value].slice(0, 30);
-          emit("changed");
-        }
-      },
-    );
+    await streamAnswer(question.value, controller.signal, (event, data) => {
+      if (event === "progress") progress.value = data;
+      if (event === "section") partial.value.push(data);
+      if (event === "error") throw Error(data);
+      if (event === "answer") {
+        active.value = data;
+        answers.value = [data, ...answers.value].slice(0, 30);
+        emit("changed");
+      }
+    });
     if (!active.value) throw Error("连接中断，没有收到完整回答");
   } catch (e) {
     if ((e as Error).name !== "AbortError") error.value = (e as Error).message;
@@ -95,14 +89,11 @@ async function submitFeedback() {
   feedbackSaving.value = true;
   feedbackError.value = "";
   try {
-    await api(
-      "/spaces/" + props.space + "/answers/" + target.id + "/feedback",
-      {
-        method: "POST",
-        body: JSON.stringify({ kind, note }),
-        signal: AbortSignal.timeout(10000),
-      },
-    );
+    await api("/answers/" + target.id + "/feedback", {
+      method: "POST",
+      body: JSON.stringify({ kind, note }),
+      signal: AbortSignal.timeout(10000),
+    });
     target.feedback = kind;
     target.feedback_note = note;
     emit("feedbackSaved", target);
@@ -122,7 +113,9 @@ async function submitFeedback() {
     <div>
       <p class="eyebrow">ASK WITH EVIDENCE</p>
       <h2>每个答案，都有来处。</h2>
-      <p class="muted">只查询当前空间。资料不足时，明确说不知道。</p>
+      <p class="muted">
+        统一检索全部知识库，引用标注来源。资料不足时，明确说不知道。
+      </p>
     </div>
   </div>
   <form class="question-box" @submit.prevent="ask">
@@ -171,6 +164,18 @@ async function submitFeedback() {
           >
             ↗
             {{ active.evidence.find((e) => e.id === citation.chunkId)?.title }}
+            <template
+              v-if="
+                active.evidence.find((e) => e.id === citation.chunkId)
+                  ?.space_name
+              "
+            >
+              ·
+              {{
+                active.evidence.find((e) => e.id === citation.chunkId)
+                  ?.space_name
+              }}</template
+            >
             · 查看依据
           </button>
         </section>
@@ -281,7 +286,7 @@ async function submitFeedback() {
           {{ modeNames[answer.mode] }}</small
         >
       </button>
-      <p class="muted">
+      <p class="muted history-note">
         显示最近 30 条。历史引用是回答时快照，点击可核对当前版本。
       </p>
     </aside>

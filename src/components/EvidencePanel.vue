@@ -48,6 +48,7 @@ watch(
       <div>
         <p class="eyebrow">SOURCE OF TRUTH</p>
         <h3>{{ source.title }}</h3>
+        <p v-if="source.space_name" class="muted">知识库：{{ source.space_name }}</p>
       </div>
       <button aria-label="关闭原文" @click="$emit('close')">×</button>
     </div>

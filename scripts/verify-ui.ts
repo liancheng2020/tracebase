@@ -27,9 +27,9 @@ try {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base);
   assert.doesNotMatch(await page.locator(".brand").innerText(), /LOCAL/);
-  await page.getByRole("button", { name: "创建第一个知识空间" }).click();
-  await page.getByLabel("空间名称").fill("星桥 · 项目知识");
-  await page.getByRole("button", { name: "创建空间", exact: true }).click();
+  await page.getByRole("button", { name: "创建第一个知识库" }).click();
+  await page.getByLabel("知识库名称").fill("星桥 · 项目知识");
+  await page.getByRole("button", { name: "创建知识库", exact: true }).click();
   await page.getByRole("button", { name: "从示例开始", exact: true }).click();
   await page.getByText("已就绪", { exact: true }).waitFor({ timeout: 20000 });
   await mkdir("artifacts", { recursive: true });
@@ -186,6 +186,61 @@ try {
     .waitFor();
   await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
   // Update and verify the new revision is committed, not mixed with old chunks.
+  await page.request.post(base + "/api/spaces", {
+    data: { name: "第二知识库" },
+  });
+  await page.reload();
+  await page
+    .locator(".library-card")
+    .filter({ hasText: "第二知识库" })
+    .waitFor();
+  assert.equal(await page.locator(".library-card").count(), 2);
+  assert.equal(await page.locator(".library-breadcrumb").count(), 0);
+  assert.equal(await page.locator(".space-link").count(), 0);
+  await page.getByLabel("搜索知识库").fill("第二");
+  assert.equal(await page.locator(".library-card").count(), 1);
+  await page.getByLabel("搜索知识库").fill("没有这个库");
+  await page.getByText("没有匹配的知识库", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "清空搜索", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 900 });
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+  );
+  await page.screenshot({
+    path: "artifacts/libraries-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "artifacts/libraries.png", fullPage: true });
+  await page.locator(".library-card").filter({ hasText: "第二知识库" }).click();
+  await page
+    .locator(".library-breadcrumb")
+    .getByRole("button", { name: "知识空间" })
+    .click();
+  assert.equal(await page.locator(".library-card").count(), 2);
+  await page.locator(".library-card").filter({ hasText: "第二知识库" }).click();
+  await page.getByRole("button", { name: "从示例开始", exact: true }).waitFor();
+  await page.locator("nav").getByRole("button", { name: "问答工作台" }).click();
+  await page.locator(".history > button").first().click();
+  assert.match(await page.locator(".topbar").innerText(), /全部知识库/);
+  assert.equal(
+    await page.getByLabel("反馈说明").inputValue(),
+    "超时后保留的说明",
+  );
+  await page.locator(".citation").first().click();
+  await page.locator(".source-chunk.selected").waitFor();
+  await page
+    .locator(".evidence-panel")
+    .getByText(/当前有效版本/)
+    .waitFor();
+  await page.getByRole("button", { name: "关闭原文" }).click();
+  await page.locator("nav").getByRole("button", { name: "知识健康" }).click();
+  await page.getByText("反馈：超时后保留的说明", { exact: true }).waitFor();
+  await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
+  await page.locator(".library-card").filter({ hasText: "星桥" }).click();
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "更新", exact: true }).click();
   const chooser = await chooserPromise;
@@ -234,9 +289,37 @@ try {
     });
   }
   await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
+  await page.locator(".library-card").filter({ hasText: "星桥" }).click();
   await page.getByRole("button", { name: "删除", exact: true }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await page.getByRole("button", { name: "从示例开始", exact: true }).waitFor();
+  await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
+  const deleteLibrary = page.getByRole("button", {
+    name: "删除知识库：星桥 · 项目知识",
+    exact: true,
+  });
+  await deleteLibrary.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  assert.equal(await page.locator(".library-card").count(), 2);
+  await deleteLibrary.click();
+  await page
+    .getByRole("button", { name: "确认删除", exact: true })
+    .click();
+  await page
+    .locator(".library-card")
+    .filter({ hasText: "星桥" })
+    .waitFor({ state: "detached" });
+  assert.equal(await page.locator(".library-card").count(), 1);
+  await page
+    .getByRole("button", { name: "删除知识库：第二知识库", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "确认删除", exact: true })
+    .click();
+  await page.getByRole("button", { name: "创建第一个知识库" }).waitFor();
   assert.deepEqual(errors, []);
   console.log(
     "PASS: create, import, index, ask, source, feedback, update, delete, responsive layouts; no page errors",

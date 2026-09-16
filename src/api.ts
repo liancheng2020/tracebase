@@ -14,12 +14,11 @@ export async function api<T>(
   return data;
 }
 export async function streamAnswer(
-  space: string,
   question: string,
   signal: AbortSignal,
   onEvent: (event: string, data: any) => void,
 ) {
-  const response = await fetch("/api/spaces/" + space + "/ask", {
+  const response = await fetch("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question }),

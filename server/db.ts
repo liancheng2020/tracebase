@@ -16,6 +16,7 @@ export async function openDatabase(path?: string) {
     CREATE INDEX IF NOT EXISTS chunks_tokens ON chunks USING gin(tokens);
     CREATE TABLE IF NOT EXISTS answers (id uuid PRIMARY KEY, space_id uuid NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       question text NOT NULL, payload jsonb NOT NULL, feedback text, feedback_note text, created_at timestamptz NOT NULL DEFAULT now());
+    ALTER TABLE answers ALTER COLUMN space_id DROP NOT NULL;
   `);
   return db;
 }
