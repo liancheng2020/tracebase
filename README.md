@@ -4,6 +4,25 @@
 
 本机运行的项目知识库：集中管理资料，跨知识库提问，通过引用核对原文。
 
+## 操作演示
+
+[![点击观看 TraceBase 操作演示](docs/media/tracebase-demo-poster.png)](docs/media/tracebase-demo.mp4)
+
+[▶ 观看 / 下载视频（约 34 秒，MP4，1.2 MB）](docs/media/tracebase-demo.mp4)
+
+知识库概览 → 导入资料 → 统一问答 → 核对原文 → 提交反馈 → 知识健康。
+
+使用虚构资料、真实本地接口录制，中文字幕、无配音；演示无 Key 的关键词检索与原文摘录，不代表模型生成效果。无法直接播放时，请下载后打开。[重新录制](docs/RECORDING.md)
+
+<details>
+<summary>更多界面截图</summary>
+
+| 知识库概览 | 知识健康 |
+| --- | --- |
+| ![知识库概览](docs/media/tracebase-libraries.png) | ![知识健康](docs/media/tracebase-health.png) |
+
+</details>
+
 ## 功能
 
 - 多知识库卡片管理，支持 Markdown、UTF-8 TXT / HTML 和文字型 PDF 的导入、更新、索引与删除。
