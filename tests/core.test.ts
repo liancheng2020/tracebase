@@ -297,12 +297,11 @@ test("DeepSeek 模拟成功与异常均保留可追溯降级", async (t) => {
         const content = invalid
           ? "not-json"
           : JSON.stringify({
+              status: "answered",
               sections: [
                 {
                   text: "默认端口为4500。",
-                  citations: [
-                    { chunkId: evidence[0].id, quote: "端口默认是 4500。" },
-                  ],
+                  citations: [{ sourceId: "S1", quote: "端口默认是 4500。" }],
                 },
               ],
             });

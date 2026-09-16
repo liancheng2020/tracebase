@@ -1,5 +1,5 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { htmlText } from "./html.ts";
+import { extractHtml } from "./html.ts";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 const fontDirectory =
@@ -8,6 +8,7 @@ const fontDirectory =
     "standard_fonts",
   ).replaceAll("\\", "/") + "/";
 export interface Part {
+  extractionWarning?: string;
   heading: string;
   page: number | null;
   content: string;
@@ -91,9 +92,16 @@ export async function parseDocument(
       throw Error("请将文本保存为 UTF-8 编码");
     }
     if (text.includes("\0")) throw Error("文件不是可读文本");
-    if (extension === "html" || extension === "htm") text = htmlText(text);
+    let warning: string | null = null;
+    if (extension === "html" || extension === "htm") {
+      const extracted = extractHtml(text);
+      text = extracted.text;
+      warning = extracted.warning;
+    }
     if (text.length > 150000) throw Error("文本最多支持 15 万字符");
-    parts = splitText(text);
+    parts = splitText(text).map((part) =>
+      warning ? { ...part, extractionWarning: warning } : part,
+    );
   } else throw Error("仅支持 Markdown、TXT、HTML 和文字型 PDF");
   if (!parts.length || parts.every((p) => p.content.trim().length < 2))
     throw Error("没有可索引的文本；扫描 PDF 请先 OCR");

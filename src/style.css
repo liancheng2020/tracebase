@@ -35,8 +35,11 @@ button:hover:not(:disabled) {
   background: #edf2e8;
 }
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.5;
+}
+button[aria-busy="true"] {
+  cursor: wait;
 }
 button:focus-visible,
 a:focus-visible,
@@ -150,14 +153,6 @@ small {
 }
 .brand img {
   width: 34px;
-}
-.brand span {
-  font-size: 8px;
-  letter-spacing: 1px;
-  border: 1px solid #cedbc6;
-  padding: 1px 4px;
-  border-radius: 4px;
-  margin-left: auto;
 }
 .nav-label {
   font-size: 10px;
@@ -606,8 +601,16 @@ footer small {
 }
 .chat-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 230px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.45fr);
   gap: 20px;
+}
+.answer-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.answer-column > .card {
+  flex: 1;
 }
 .answer-card h3 {
   font-size: 19px;
@@ -670,12 +673,24 @@ details summary {
   font-size: 11px;
   margin-top: 5px;
 }
+.feedback-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-top: 5px;
+}
+.feedback > .error {
+  width: 100%;
+  margin-bottom: 0;
+}
 .chosen {
   background: #e4eedc !important;
   border-color: #b7cba7;
 }
 .history {
-  align-self: start;
+  align-self: stretch;
   padding: 19px;
 }
 .history h3 {
@@ -887,9 +902,6 @@ details summary {
   .brand {
     font-size: 19px;
   }
-  .brand span {
-    display: none;
-  }
   .chat-columns {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -922,9 +934,6 @@ details summary {
   }
   .brand {
     margin-bottom: 15px;
-  }
-  .brand span {
-    display: inline-block;
   }
   .sidebar > .nav-label,
   .sidebar-bottom,

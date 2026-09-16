@@ -4,7 +4,7 @@ import type { Evidence, Answer } from "../shared/types.ts";
 import { tokens } from "./documents.ts";
 import { embed, generate } from "./models.ts";
 const columns =
-  "c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content";
+  "c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content,d.extraction_warning";
 export async function retrieve(db: Database, space: string, question: string) {
   const terms = tokens(question).slice(0, 150);
   const lexical = await db.query<Evidence>(
@@ -78,8 +78,19 @@ export async function answerQuestion(
         text: e.content,
         citations: [{ chunkId: e.id, quote: e.content.slice(0, 300) }],
       }));
-    answer.mode = generated.sections ? "deepseek" : "extractive";
-    answer.notice = generated.notice;
+    answer.mode =
+      generated.status === "insufficient"
+        ? "abstain"
+        : generated.status === "answered"
+          ? "deepseek"
+          : "extractive";
+    if ("errorCode" in generated) answer.errorCode = generated.errorCode;
+    answer.notice = [
+      generated.notice,
+      ...new Set(
+        found.evidence.map((e) => e.extraction_warning).filter(Boolean),
+      ),
+    ].join(" ");
   }
   answer.elapsedMs = Date.now() - start;
   // Persist only if the evidence still belongs to the active revision in this space.

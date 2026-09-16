@@ -152,6 +152,9 @@ async function preview(doc: Document) {
           v-if="doc.active_revision && doc.active_revision !== doc.revision"
           class="warning"
           >新版尚未生效，检索仍使用 v{{ doc.active_revision }}</small
+        ><small v-if="doc.extraction_warning" class="warning">{{
+          doc.extraction_warning
+        }}</small
         ><small v-if="doc.error" class="warning">{{ doc.error }}</small>
       </div>
       <div class="document-status">

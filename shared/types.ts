@@ -6,6 +6,7 @@ export interface Space {
   ready: number;
 }
 export interface Document {
+  extraction_warning?: string | null;
   id: string;
   space_id: string;
   title: string;
@@ -18,6 +19,7 @@ export interface Document {
   mode: string | null;
 }
 export interface Evidence {
+  extraction_warning?: string | null;
   id: string;
   document_id: string;
   revision: number;
@@ -32,6 +34,7 @@ export interface Section {
   citations: { chunkId: string; quote: string }[];
 }
 export interface Answer {
+  errorCode?: string;
   id: string;
   question: string;
   sections: Section[];

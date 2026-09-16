@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import type { Answer, Evidence, Section } from "../../shared/types";
 import { api, streamAnswer, date } from "../api";
 const props = defineProps<{ space: string }>();
-const emit = defineEmits<{ preview: [evidence: Evidence]; changed: [] }>();
+const emit = defineEmits<{
+  preview: [evidence: Evidence];
+  changed: [];
+  feedbackSaved: [answer: Answer];
+}>();
 const question = ref(""),
   answers = ref<Answer[]>([]),
   active = ref<Answer | null>(null),
@@ -12,6 +16,28 @@ const question = ref(""),
   progress = ref(""),
   partial = ref<Section[]>([]),
   feedbackNote = ref("");
+const feedbackKind = ref<"helpful" | "incorrect" | null>(null);
+const feedbackSaving = ref(false);
+const feedbackError = ref("");
+const feedbackDirty = computed(
+  () =>
+    !!feedbackKind.value &&
+    (feedbackKind.value !== active.value?.feedback ||
+      feedbackNote.value !== (active.value?.feedback_note ?? "")),
+);
+watch(
+  () => active.value?.id,
+  () => {
+    const saved = active.value?.feedback;
+    feedbackKind.value =
+      saved === "helpful" || saved === "incorrect" ? saved : null;
+    feedbackNote.value = active.value?.feedback_note ?? "";
+    feedbackError.value = "";
+  },
+);
+watch([feedbackKind, feedbackNote], () => {
+  feedbackError.value = "";
+});
 let controller: AbortController | undefined;
 const modeNames = {
   deepseek: "DeepSeek · 有据回答",
@@ -21,7 +47,6 @@ const modeNames = {
 onMounted(async () => {
   try {
     answers.value = await api<Answer[]>("/spaces/" + props.space + "/answers");
-    active.value = answers.value[0] || null;
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -62,20 +87,33 @@ function cite(id: string) {
   const source = active.value?.evidence.find((e) => e.id === id);
   if (source) emit("preview", source);
 }
-async function feedback(kind: "helpful" | "incorrect") {
-  if (!active.value) return;
+async function submitFeedback() {
+  const target = active.value;
+  const kind = feedbackKind.value;
+  const note = feedbackNote.value;
+  if (!target || !kind || feedbackSaving.value || !feedbackDirty.value) return;
+  feedbackSaving.value = true;
+  feedbackError.value = "";
   try {
     await api(
-      "/spaces/" + props.space + "/answers/" + active.value.id + "/feedback",
+      "/spaces/" + props.space + "/answers/" + target.id + "/feedback",
       {
         method: "POST",
-        body: JSON.stringify({ kind, note: feedbackNote.value }),
+        body: JSON.stringify({ kind, note }),
+        signal: AbortSignal.timeout(10000),
       },
     );
-    active.value.feedback = kind;
-    emit("changed");
+    target.feedback = kind;
+    target.feedback_note = note;
+    emit("feedbackSaved", target);
   } catch (e) {
-    error.value = (e as Error).message;
+    if (active.value?.id === target.id)
+      feedbackError.value =
+        (e as Error).name === "TimeoutError"
+          ? "请求超时，暂未确认保存结果，可重试或重新打开历史回答核对"
+          : (e as Error).message;
+  } finally {
+    feedbackSaving.value = false;
   }
 }
 </script>
@@ -110,7 +148,7 @@ async function feedback(kind: "helpful" | "incorrect") {
     <p v-for="(s, i) in partial" :key="i">{{ s.text }}</p>
   </div>
   <div class="chat-columns">
-    <div>
+    <div class="answer-column">
       <article v-if="active && !busy" class="card answer-card">
         <div class="card-heading">
           <span class="badge ready">{{ modeNames[active.mode] }}</span
@@ -154,25 +192,66 @@ async function feedback(kind: "helpful" | "incorrect") {
             {{ e.score.toFixed(4) }}
           </button>
         </details>
-        <div class="feedback">
-          <span>这次回答有帮助吗？</span
-          ><button
-            :class="{ chosen: active.feedback === 'helpful' }"
-            @click="feedback('helpful')"
+        <form
+          class="feedback"
+          @submit.prevent="submitFeedback"
+          :aria-busy="feedbackSaving"
+        >
+          <span>这次回答有帮助吗？</span>
+          <button
+            type="button"
+            :class="{ chosen: feedbackKind === 'helpful' }"
+            :aria-pressed="feedbackKind === 'helpful'"
+            :disabled="feedbackSaving"
+            @click="feedbackKind = 'helpful'"
           >
-            有帮助</button
-          ><button
-            :class="{ chosen: active.feedback === 'incorrect' }"
-            @click="feedback('incorrect')"
+            有帮助
+          </button>
+          <button
+            type="button"
+            :class="{ chosen: feedbackKind === 'incorrect' }"
+            :aria-pressed="feedbackKind === 'incorrect'"
+            :disabled="feedbackSaving"
+            @click="feedbackKind = 'incorrect'"
           >
-            不准确</button
-          ><input
+            不准确
+          </button>
+          <input
             v-model="feedbackNote"
             maxlength="500"
-            placeholder="可选：先填写原因，再提交反馈"
+            :disabled="feedbackSaving"
+            placeholder="可选：说明有帮助的地方或需要改进的问题"
             aria-label="反馈说明"
           />
-        </div>
+          <div class="feedback-footer">
+            <span role="status" class="muted">{{
+              feedbackSaving
+                ? "正在保存…"
+                : feedbackDirty
+                  ? "修改尚未提交"
+                  : active.feedback
+                    ? "反馈已保存"
+                    : "选择类型后提交反馈"
+            }}</span>
+            <button
+              type="submit"
+              class="primary"
+              :disabled="feedbackSaving || !feedbackDirty"
+              :aria-busy="feedbackSaving"
+            >
+              {{
+                feedbackSaving
+                  ? "提交中…"
+                  : active.feedback && !feedbackDirty
+                    ? "已保存"
+                    : "提交反馈"
+              }}
+            </button>
+          </div>
+          <p v-if="feedbackError" role="alert" class="notice error">
+            反馈保存失败：{{ feedbackError }}，请重试。
+          </p>
+        </form>
       </article>
       <div v-else-if="!busy" class="card empty">
         <div class="empty-mark">⌘</div>
@@ -194,10 +273,7 @@ async function feedback(kind: "helpful" | "incorrect") {
         :key="answer.id"
         :class="{ current: active?.id === answer.id }"
         :disabled="busy"
-        @click="
-          active = answer;
-          feedbackNote = '';
-        "
+        @click="active = answer"
       >
         {{ answer.question
         }}<small

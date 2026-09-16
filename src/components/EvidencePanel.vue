@@ -52,6 +52,9 @@ watch(
       <button aria-label="关闭原文" @click="$emit('close')">×</button>
     </div>
     <p class="notice">{{ notice }}</p>
+    <p v-if="source.extraction_warning" class="notice">
+      {{ source.extraction_warning }}
+    </p>
     <details v-if="revisions.length" class="revision-list">
       <summary>版本记录（{{ revisions.length }}）</summary>
       <p v-for="r in revisions" :key="r.revision">

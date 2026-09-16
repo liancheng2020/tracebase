@@ -120,7 +120,7 @@ export function createApi(db: Database) {
     }
     const chunks = (
       await db.query(
-        "SELECT c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.id=$1 AND d.space_id=$2 AND c.revision=d.active_revision ORDER BY c.position",
+        "SELECT c.id,c.document_id,c.revision,d.title,c.heading,c.page,c.content,d.extraction_warning FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.id=$1 AND d.space_id=$2 AND c.revision=d.active_revision ORDER BY c.position",
         params,
       )
     ).rows;

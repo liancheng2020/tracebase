@@ -73,12 +73,23 @@ onMounted(async () => {
     config.value = await api("/config");
     await refresh();
     await refresh();
-    timer = setInterval(refresh, 2500);
+    timer = setInterval(() => {
+      if (pending.value && !document.hidden) void refresh();
+    }, 2500);
   } catch (e) {
     error.value = (e as Error).message;
   }
 });
 onBeforeUnmount(() => clearInterval(timer));
+function updateFeedback(answer: Answer) {
+  const saved = feedback.value.find((item) => item.id === answer.id);
+  if (saved) {
+    saved.feedback = answer.feedback;
+    saved.feedback_note = answer.feedback_note;
+  } else {
+    feedback.value = [answer, ...feedback.value].slice(0, 30);
+  }
+}
 async function create() {
   if (createBusy.value || !newName.value.trim()) return;
   createBusy.value = true;
@@ -102,7 +113,7 @@ async function create() {
   <div class="app-shell">
     <aside class="sidebar">
       <a class="brand" href="/" aria-label="TraceBase 首页"
-        ><img src="/logo.svg" alt="" />TraceBase<span>LOCAL</span></a
+        ><img src="/logo.svg" alt="" />TraceBase</a
       >
       <p class="nav-label">工作区</p>
       <nav>
@@ -209,6 +220,7 @@ async function create() {
             :space="space"
             @preview="source = $event"
             @changed="refresh"
+            @feedback-saved="updateFeedback"
           />
           <template v-else
             ><div class="section-heading">
@@ -306,7 +318,7 @@ async function create() {
           maxlength="60"
           required
           autofocus
-          placeholder="例如：ReproLens 项目知识"
+          placeholder="例如：产品需求知识库"
         />
         <div class="actions">
           <button type="button" @click="creating = false">取消</button

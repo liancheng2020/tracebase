@@ -59,8 +59,14 @@ export function createIndexer(db: Database) {
             );
           }
           await tx.query(
-            "UPDATE documents SET status='ready',active_revision=$2,error=$3,mode=$4 WHERE id=$1",
-            [doc.id, doc.revision, warning, vectors ? "hybrid" : "keyword"],
+            "UPDATE documents SET status='ready',active_revision=$2,error=$3,mode=$4,extraction_warning=$5 WHERE id=$1",
+            [
+              doc.id,
+              doc.revision,
+              warning,
+              vectors ? "hybrid" : "keyword",
+              parts[0]?.extractionWarning ?? null,
+            ],
           );
         });
       } catch (e) {
