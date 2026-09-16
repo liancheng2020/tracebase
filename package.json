@@ -1,0 +1,41 @@
+{
+  "name": "tracebase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "tsx watch server/index.ts",
+    "build": "vue-tsc --noEmit && tsc --noEmit && vite build",
+    "start": "tsx server/index.ts --production",
+    "test": "tsx --test tests/*.test.ts",
+    "test:ui": "tsx scripts/verify-ui.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@electric-sql/pglite-pgvector": "0.0.9",
+    "cheerio": "^1.2.0",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "pdfjs-dist": "^6.2.108",
+    "proper-lockfile": "^4.1.2",
+    "vue": "^3.5.21",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^22.18.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "playwright": "^1.55.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.20.5",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.5",
+    "vue-tsc": "^3.0.6"
+  }
+}
