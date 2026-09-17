@@ -32,6 +32,7 @@ export interface Evidence {
   score: number;
 }
 export interface Section {
+  title?: string;
   text: string;
   citations: { chunkId: string; quote: string }[];
 }

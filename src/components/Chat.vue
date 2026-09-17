@@ -32,6 +32,31 @@ const question = ref(""),
 const feedbackKind = ref<"helpful" | "incorrect" | null>(null);
 const feedbackSaving = ref(false);
 const feedbackError = ref("");
+const deletingId = ref("");
+const deleteError = ref("");
+const pendingDelete = ref<Answer | null>(null);
+async function deleteAnswer(answer: Answer) {
+  if (busy.value || feedbackSaving.value || deletingId.value) return;
+  deletingId.value = answer.id;
+  deleteError.value = "";
+  try {
+    await api("/answers/" + answer.id, {
+      method: "DELETE",
+      signal: AbortSignal.timeout(10000),
+    });
+    answers.value = answers.value.filter((item) => item.id !== answer.id);
+    if (active.value?.id === answer.id) active.value = null;
+    pendingDelete.value = null;
+    emit("changed");
+  } catch (e) {
+    deleteError.value =
+      (e as Error).name === "TimeoutError"
+        ? "删除请求超时，暂未确认结果，请刷新历史记录核对。"
+        : "删除失败：" + (e as Error).message;
+  } finally {
+    deletingId.value = "";
+  }
+}
 const feedbackDirty = computed(
   () =>
     !!feedbackKind.value &&
@@ -66,7 +91,8 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => controller?.abort());
 async function ask() {
-  if (busy.value || question.value.trim().length < 2) return;
+  if (busy.value || deletingId.value || question.value.trim().length < 2)
+    return;
   busy.value = true;
   error.value = "";
   active.value = null;
@@ -104,7 +130,14 @@ async function submitFeedback() {
   const target = active.value;
   const kind = feedbackKind.value;
   const note = feedbackNote.value;
-  if (!target || !kind || feedbackSaving.value || !feedbackDirty.value) return;
+  if (
+    !target ||
+    !kind ||
+    deletingId.value ||
+    feedbackSaving.value ||
+    !feedbackDirty.value
+  )
+    return;
   feedbackSaving.value = true;
   feedbackError.value = "";
   try {
@@ -159,7 +192,10 @@ async function submitFeedback() {
     <div class="question-footer">
       <span
         >文档内的指令不会作为系统指令执行 · {{ question.length }} / 1500</span
-      ><button class="primary" :disabled="busy || question.trim().length < 2">
+      ><button
+        class="primary"
+        :disabled="busy || !!deletingId || question.trim().length < 2"
+      >
         {{ busy ? "正在寻找依据…" : "提问 ↗" }}
       </button>
     </div>
@@ -181,36 +217,48 @@ async function submitFeedback() {
           本次检索范围：{{ scopeName(active.space_id) }}
         </p>
         <p class="notice">{{ active.notice }}</p>
-        <section
-          v-for="(section, index) in active.sections"
-          :key="index"
-          class="answer-section"
+        <component
+          :is="active.mode === 'extractive' ? 'details' : 'div'"
+          :key="active.id"
+          class="answer-content"
         >
-          <p>{{ section.text }}</p>
-          <button
-            v-for="citation in section.citations"
-            :key="citation.chunkId"
-            class="citation"
-            :title="citation.quote"
-            @click="cite(citation.chunkId)"
+          <summary v-if="active.mode === 'extractive'">
+            查看检索原文（仅供参考，非总结答案）
+          </summary>
+          <section
+            v-for="(section, index) in active.sections"
+            :key="index"
+            class="answer-section"
           >
-            ↗
-            {{ active.evidence.find((e) => e.id === citation.chunkId)?.title }}
-            <template
-              v-if="
-                active.evidence.find((e) => e.id === citation.chunkId)
-                  ?.space_name
-              "
+            <h4 v-if="section.title">{{ section.title }}</h4>
+            <p>{{ section.text }}</p>
+            <button
+              v-for="citation in section.citations"
+              :key="citation.chunkId + citation.quote"
+              class="citation"
+              :title="citation.quote"
+              @click="cite(citation.chunkId)"
             >
-              ·
+              ↗
               {{
-                active.evidence.find((e) => e.id === citation.chunkId)
-                  ?.space_name
-              }}</template
-            >
-            · 查看依据
-          </button>
-        </section>
+                active.evidence.find((e) => e.id === citation.chunkId)?.title
+              }}
+              <template
+                v-if="
+                  active.evidence.find((e) => e.id === citation.chunkId)
+                    ?.space_name
+                "
+              >
+                ·
+                {{
+                  active.evidence.find((e) => e.id === citation.chunkId)
+                    ?.space_name
+                }}</template
+              >
+              · 查看依据
+            </button>
+          </section>
+        </component>
         <details class="trace">
           <summary>
             检索记录 · {{ active.retrieval }} ·
@@ -305,22 +353,89 @@ async function submitFeedback() {
     <aside class="card history">
       <h3>最近提问</h3>
       <p v-if="!answers.length" class="muted">还没有历史记录</p>
-      <button
+      <div
         v-for="answer in answers"
         :key="answer.id"
+        class="history-item"
         :class="{ current: active?.id === answer.id }"
-        :disabled="busy"
-        @click="active = answer"
       >
-        {{ answer.question
-        }}<small
-          >{{ answer.created_at ? date(answer.created_at) : "刚刚" }} ·
-          {{ modeNames[answer.mode] }}</small
+        <button
+          class="history-select"
+          :disabled="busy || !!deletingId"
+          @click="active = answer"
         >
-      </button>
+          {{ answer.question
+          }}<small
+            >{{ answer.created_at ? date(answer.created_at) : "刚刚" }} ·
+            {{ modeNames[answer.mode] }}</small
+          >
+        </button>
+        <button
+          class="history-delete"
+          :class="{ deleting: deletingId === answer.id }"
+          :aria-label="'删除提问：' + answer.question"
+          :title="deletingId === answer.id ? '正在删除…' : '删除提问'"
+          :aria-busy="deletingId === answer.id"
+          :disabled="busy || feedbackSaving || !!deletingId"
+          @click.stop="
+            pendingDelete = answer;
+            deleteError = '';
+          "
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" />
+          </svg>
+        </button>
+      </div>
       <p class="muted history-note">
         显示最近 30 条。历史引用是回答时快照，点击可核对当前版本。
       </p>
     </aside>
+  </div>
+  <div v-if="pendingDelete" class="modal-backdrop">
+    <form
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-answer-title"
+      aria-describedby="delete-answer-description"
+      @submit.prevent="deleteAnswer(pendingDelete)"
+      @keydown.esc.stop.prevent="!deletingId && (pendingDelete = null)"
+    >
+      <h3 id="delete-answer-title">删除提问</h3>
+      <p class="delete-question">确定删除“{{ pendingDelete.question }}”吗？</p>
+      <p id="delete-answer-description" class="muted">
+        将永久删除该次提问、回答及相关反馈，无法撤销。知识库资料和其他提问不受影响。
+      </p>
+      <p v-if="deleteError" role="alert" class="notice error">
+        {{ deleteError }}
+      </p>
+      <div class="actions">
+        <button
+          type="button"
+          :disabled="!!deletingId"
+          @click="pendingDelete = null"
+        >
+          取消
+        </button>
+        <button
+          class="danger-fill"
+          :disabled="!!deletingId"
+          :aria-busy="!!deletingId"
+        >
+          {{ deletingId ? "删除中…" : "确认删除" }}
+        </button>
+      </div>
+    </form>
   </div>
 </template>

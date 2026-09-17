@@ -23,7 +23,8 @@ const valid = {
   sections: [
     {
       text: "包含标题和截止时间。",
-      citations: [{ sourceId: "S1", quote: evidence[0].content }],
+      title: "结论",
+      references: ["S1F1"],
     },
   ],
 };
@@ -41,7 +42,7 @@ const response = (value: unknown, finish = "stop") =>
     }),
   );
 
-test("短编号映射后仍验证真实来源与逐字引文，拒答不得夹带结论", () => {
+test("片段编号回填真实引文，拒绝模型自写引文和伪造来源", () => {
   assert.equal(
     validateModelResult(valid, evidence).sections[0].citations[0].chunkId,
     evidence[0].id,
@@ -54,7 +55,7 @@ test("短编号映射后仍验证真实来源与逐字引文，拒答不得夹�
           sections: [
             {
               ...valid.sections[0],
-              citations: [{ sourceId: "S2", quote: evidence[0].content }],
+              references: ["S2F1"],
             },
           ],
         },
@@ -62,23 +63,21 @@ test("短编号映射后仍验证真实来源与逐字引文，拒答不得夹�
       ),
     /不存在/,
   );
-  assert.throws(
-    () =>
-      validateModelResult(
-        {
-          ...valid,
-          sections: [
-            {
-              ...valid.sections[0],
-              citations: [
-                { sourceId: "S1", quote: "投票设置包含标题、头像和截止时间。" },
-              ],
-            },
-          ],
-        },
-        evidence,
-      ),
-    /不一致/,
+  assert.throws(() =>
+    validateModelResult(
+      {
+        ...valid,
+        sections: [
+          {
+            ...valid.sections[0],
+            citations: [
+              { sourceId: "S1", quote: "投票设置包含标题、头像和截止时间。" },
+            ],
+          },
+        ],
+      },
+      evidence,
+    ),
   );
   assert.throws(() =>
     validateModelResult(
@@ -126,13 +125,14 @@ test("HTTP、网络、超时、格式、截断与引用错误分别提示，绝�
           sections: [
             {
               text: "说明",
-              citations: [{ sourceId: "S2", quote: evidence[0].content }],
+              title: "结论",
+              references: ["S2F1"],
             },
           ],
         }),
     },
     {
-      code: "citation_quote",
+      code: "output_schema",
       request: async () =>
         response({
           ...valid,

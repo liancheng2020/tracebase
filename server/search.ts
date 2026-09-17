@@ -78,7 +78,7 @@ export async function answerQuestion(
   };
   if (found.evidence.length) {
     onProgress("已找到 " + found.evidence.length + " 段证据，正在核对引用…");
-    const generated = await generate(question, found.evidence);
+    const generated = await generate(question, found.evidence, onProgress);
     answer.sections =
       generated.sections ||
       found.evidence.slice(0, 3).map((e) => ({

@@ -704,6 +704,15 @@ footer small {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+.answer-content > summary {
+  cursor: pointer;
+  color: #597a48;
+  padding: 12px 0;
+}
+.answer-section h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
 .citation {
   font-size: 10px;
   background: #eef4e9;
@@ -775,7 +784,22 @@ details summary {
 .history h3 {
   font-size: 13px;
 }
-.history > button {
+.history-item {
+  position: relative;
+  margin-bottom: 7px;
+  border-radius: 6px;
+}
+.delete-question {
+  overflow-wrap: anywhere;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.history-item:hover,
+.history-item:focus-within,
+.history-item.current {
+  background: #eff3e9;
+}
+.history-select {
   display: block;
   width: 100%;
   text-align: left;
@@ -783,16 +807,44 @@ details summary {
   border-radius: 6px;
   font-size: 12px;
   line-height: 1.6;
-  margin-bottom: 7px;
-  padding: 10px;
+  padding: 10px 44px 10px 10px;
+  background: transparent;
   overflow-wrap: anywhere;
 }
-.history > button.current {
-  background: #eff3e9;
+.history-delete {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  color: #986257;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+.history-item:hover .history-delete,
+.history-item:focus-within .history-delete,
+.history-delete.deleting {
+  opacity: 1;
+  pointer-events: auto;
+}
+.history-delete:hover:not(:disabled) {
+  background: #f6e7e3;
+}
+@media (hover: none), (pointer: coarse) {
+  .history-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .history small {
   display: block;
-  font-size: 9px;
+  font-size: 10px;
   margin-top: 5px;
 }
 .history > .muted {
@@ -1068,7 +1120,7 @@ details summary {
   .chat-columns {
     grid-template-columns: minmax(0, 1fr);
   }
-  .history > button {
+  .history-item {
     display: inline-block;
     width: 48%;
     vertical-align: top;
@@ -1162,7 +1214,7 @@ details summary {
     margin-left: 4px;
   }
   .metrics span {
-    font-size: 9px;
+    font-size: 10px;
   }
   h2 {
     font-size: 23px;
@@ -1229,7 +1281,7 @@ details summary {
   .health-grid {
     grid-template-columns: 1fr;
   }
-  .history > button {
+  .history-item {
     width: 100%;
     margin-right: 0;
   }

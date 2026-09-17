@@ -43,7 +43,10 @@ try {
     .getByText("原文摘录 · 非生成回答", { exact: true })
     .first()
     .waitFor();
+  assert.doesNotMatch(await page.locator(".answer-card").innerText(), /PORT/);
+  await page.locator("details.answer-content > summary").click();
   assert.match(await page.locator(".answer-card").innerText(), /PORT/);
+  await page.locator("details.answer-content > summary").click();
   const cards = await page.evaluate(() => {
     const left = document
       .querySelector(".answer-card")!
@@ -58,7 +61,7 @@ try {
   assert.ok(cards.rightWidth >= 280);
   await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
   await page.locator("nav").getByRole("button", { name: "问答工作台" }).click();
-  await page.locator(".history > button").first().waitFor();
+  await page.locator(".history-select").first().waitFor();
   assert.equal(await page.getByLabel("你的问题").inputValue(), "");
   assert.equal(await page.locator(".answer-card").count(), 0);
   await page.getByText("从一个具体问题开始", { exact: true }).waitFor();
@@ -70,8 +73,12 @@ try {
     ),
   );
   assert.ok(emptyCards < 1);
-  await page.locator(".history > button").first().click();
+  await page.locator(".history-select").first().click();
   await page.locator(".answer-card").waitFor();
+  const excerpts = page.locator("details.answer-content");
+  assert.equal(await excerpts.getAttribute("open"), null);
+  assert.equal(await page.locator(".citation").first().isVisible(), false);
+  await excerpts.locator("summary").click();
   await page.locator(".citation").first().click();
   await page.locator(".source-chunk.selected").waitFor();
   assert.match(
@@ -123,7 +130,7 @@ try {
   await page.unroute("**/answers/*/feedback");
   await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
   await page.locator("nav").getByRole("button", { name: "问答工作台" }).click();
-  await page.locator(".history > button").first().click();
+  await page.locator(".history-select").first().click();
   assert.equal(
     await page.getByLabel("反馈说明").inputValue(),
     "希望补充配置示例",
@@ -224,12 +231,13 @@ try {
   await page.locator(".library-card").filter({ hasText: "第二知识库" }).click();
   await page.getByRole("button", { name: "从示例开始", exact: true }).waitFor();
   await page.locator("nav").getByRole("button", { name: "问答工作台" }).click();
-  await page.locator(".history > button").first().click();
+  await page.locator(".history-select").first().click();
   assert.match(await page.locator(".topbar").innerText(), /全部知识库/);
   assert.equal(
     await page.getByLabel("反馈说明").inputValue(),
     "超时后保留的说明",
   );
+  await page.locator("details.answer-content > summary").click();
   await page.locator(".citation").first().click();
   await page.locator(".source-chunk.selected").waitFor();
   await page
@@ -260,6 +268,7 @@ try {
     .getByText("原文摘录 · 非生成回答", { exact: true })
     .first()
     .waitFor();
+  await page.locator("details.answer-content > summary").click();
   assert.match(await page.locator(".answer-card").innerText(), /5600/);
   assert.match(
     await page.locator(".answer-card").innerText(),
@@ -306,6 +315,7 @@ try {
   await scopeSelect.selectOption({ label: "星桥 · 项目知识" });
   await page.getByRole("button", { name: "提问 ↗", exact: true }).click();
   await page.locator(".answer-card").waitFor();
+  await page.locator("details.answer-content > summary").click();
   assert.match(await page.locator(".answer-card").innerText(), /5600/);
   assert.match(await page.locator(".answer-scope").innerText(), /星桥/);
   await scopeSelect.selectOption("");
@@ -313,7 +323,41 @@ try {
   await page.getByRole("button", { name: "提问 ↗", exact: true }).click();
   await page.locator(".answer-card").waitFor();
   assert.match(await page.locator(".answer-scope").innerText(), /全部知识库/);
+  await page.locator("details.answer-content > summary").click();
   assert.match(await page.locator(".answer-card").innerText(), /5600/);
+  const historyCount = await page.locator(".history-item").count();
+  const currentItem = page.locator(".history-item.current");
+  await currentItem.hover();
+  const removeQuestion = currentItem.locator(".history-delete");
+  assert.equal(
+    await removeQuestion.evaluate((el) => getComputedStyle(el).opacity),
+    "1",
+  );
+  await removeQuestion.click();
+  const deleteDialog = page.getByRole("dialog", {
+    name: "删除提问",
+    exact: true,
+  });
+  await deleteDialog.waitFor();
+  assert.match(await deleteDialog.innerText(), /知识库资料和其他提问不受影响/);
+  await page.screenshot({
+    path: "artifacts/delete-answer-dialog.png",
+    fullPage: true,
+  });
+  await deleteDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await deleteDialog.waitFor({ state: "detached" });
+  assert.equal(await page.locator(".history-item").count(), historyCount);
+  await currentItem.hover();
+  await removeQuestion.click();
+  await deleteDialog
+    .getByRole("button", { name: "确认删除", exact: true })
+    .click();
+  await page.locator(".answer-card").waitFor({ state: "detached" });
+  assert.equal(await page.locator(".history-item").count(), historyCount - 1);
+  await page.reload();
+  await page.locator("nav").getByRole("button", { name: "问答工作台" }).click();
+  await page.locator(".history-select").first().waitFor();
+  assert.equal(await page.locator(".history-item").count(), historyCount - 1);
   await page.locator("nav").getByRole("button", { name: "知识空间" }).click();
   await page.locator(".library-card").filter({ hasText: "星桥" }).click();
   await page.getByRole("button", { name: "删除", exact: true }).click();

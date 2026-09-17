@@ -228,7 +228,8 @@ export function createApi(db: Database) {
         send("progress", stage),
       );
       // Only emit answer text after validating every citation, not unverified model tokens.
-      for (const section of answer.sections) send("section", section);
+      if (answer.mode === "deepseek")
+        for (const section of answer.sections) send("section", section);
       send("answer", answer);
     } catch {
       send("error", "本次问答未完成，请重试。");
@@ -252,6 +253,15 @@ export function createApi(db: Database) {
         .json(rows[0] || { error: "回答不存在" });
     },
   );
+  app.delete("/api/answers/:id", async (req, res) => {
+    const { rows } = await db.query(
+      "DELETE FROM answers WHERE id=$1 RETURNING id",
+      [uuid(req.params.id)],
+    );
+    res
+      .status(rows.length ? 200 : 404)
+      .json(rows[0] || { error: "回答不存在或已删除" });
+  });
   app.use("/api", (_req, res) => res.status(404).json({ error: "接口不存在" }));
   app.use(((error, _req, res, _next) => {
     if (error instanceof z.ZodError)
